@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planejador de Plantação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --wood-dark:#4a2511; --wood:#8b4a1c; --wood-light:#c27a35;
+    --paper:#f7d9a0; --paper-dark:#e2b874; --ink:#4a2511;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family:'Pixelify Sans', monospace; color:var(--ink); overflow:hidden;
+    background:#3b6b2a;
+    background-image:
+      linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,.06) 75%),
+      linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,.06) 75%);
+    background-size:16px 16px; background-position:0 0, 8px 8px;
+  }
+  #app{ height:100dvh; display:grid; grid-template-columns:340px minmax(0,1fr); gap:10px; padding:10px; }
+
+  /* ---------- painel lateral ---------- */
+  #side{ display:flex; flex-direction:column; gap:10px; min-height:0; min-width:0; overflow-y:auto; overflow-x:hidden;
+         padding:0 8px 4px 0; scrollbar-width:thin; scrollbar-color:var(--wood) transparent; }
+  #side > *{ flex:none; }
+  .panel{
+    background:var(--paper); border:4px solid var(--wood-dark);
+    box-shadow: inset 0 0 0 3px var(--wood-light), inset 0 0 0 6px var(--wood), 3px 3px 0 rgba(0,0,0,.35);
+    padding:14px 16px; min-width:0;
+  }
+  .panel h2{ margin:0 0 8px; font-size:15px; text-transform:uppercase; letter-spacing:1px; color:var(--wood); }
+  .title{
+    background:var(--wood); color:var(--paper); font-size:20px; font-weight:700; text-align:center;
+    padding:6px 10px; border:4px solid var(--wood-dark); box-shadow: inset 0 -4px 0 var(--wood-dark), 3px 3px 0 rgba(0,0,0,.35);
+    text-shadow:2px 2px 0 var(--wood-dark);
+  }
+  .tools{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
+  .row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
+  .row:last-child{ margin-bottom:0; }
+  button, select{
+    font-family:inherit; font-size:14px; color:var(--ink); cursor:pointer;
+    background:var(--paper-dark); border:3px solid var(--wood-dark);
+    box-shadow: inset -3px -3px 0 #c9974f, inset 3px 3px 0 #fbe7bd;
+    padding:4px 8px; display:flex; align-items:center; gap:6px; line-height:1.1;
+  }
+  select{ flex:1; min-width:0; }
+  button:hover{ background:#f0c987; }
+  button:active{ box-shadow: inset 3px 3px 0 #c9974f; }
+  button.on{ background:#ffe08a; border-color:#d33d17; box-shadow: inset -3px -3px 0 #e0a83a, inset 3px 3px 0 #fff3c4; }
+  button.wide{ grid-column:1/-1; justify-content:center; }
+  .tools button{ text-align:left; min-width:0; font-size:13px; padding:4px 6px; }
+  .tools button span{ min-width:0; overflow-wrap:anywhere; }
+  .sizegrid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+  .sizegrid label{ flex-direction:column; align-items:stretch; gap:2px; }
+  .sizegrid input{ width:100%; }
+  .btnrow{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .btnrow button{ justify-content:center; min-width:0; }
+  .row input[type=text]{ min-width:0; }
+  .row button{ flex:none; }
+  button img{ width:28px; height:28px; object-fit:contain; image-rendering:pixelated; flex:none; }
+  label{ font-size:14px; display:flex; align-items:center; gap:5px; }
+  input[type=number], input[type=text]{ font-family:inherit; font-size:14px; border:3px solid var(--wood-dark); background:#fff6dc; padding:2px 4px; color:var(--ink); }
+  input[type=number]{ width:52px; }
+  input[type=text]{ flex:1; min-width:0; }
+  input[type=checkbox]{ accent-color:var(--wood); width:16px; height:16px; }
+  .checks label{ margin-bottom:4px; }
+  #msg{ font-size:13px; min-height:16px; color:var(--wood); }
+
+  /* ---------- área da plantação ---------- */
+  #main{ display:flex; flex-direction:column; gap:8px; min-height:0; min-width:0; }
+  #zoombar{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  #zoombar .pill{ background:var(--paper); border:3px solid var(--wood-dark); padding:3px 8px; font-size:14px; }
+  #zoombar input[type=range]{ width:140px; accent-color:var(--wood); }
+  #view{
+    flex:1; min-height:0; overflow:auto; border:4px solid var(--wood-dark);
+    box-shadow:0 0 0 3px var(--wood), 3px 3px 0 6px rgba(0,0,0,.25);
+    background:#2e4f1f; display:flex;
+  }
+  #view > #grid{ margin:auto; }
+  #view.pan{ cursor:grab; } #view.pan:active{ cursor:grabbing; }
+  #grid{ display:grid; user-select:none; touch-action:none; --s:24px; }
+  #view.pan #grid{ touch-action:none; }
+  .c{ width:var(--s); height:var(--s); position:relative; background-size:100% 100%; image-rendering:pixelated; }
+  .c .o{ position:absolute; inset:0; background-size:contain; background-repeat:no-repeat; background-position:center bottom; image-rendering:pixelated; z-index:3; pointer-events:none; }
+  .c .o.ghost{ opacity:.55; }
+  .c.grid::after{ content:""; position:absolute; inset:0; border-right:1px solid rgba(0,0,0,.12); border-bottom:1px solid rgba(0,0,0,.12); pointer-events:none; z-index:4; }
+  .c .ov{ position:absolute; inset:0; pointer-events:none; z-index:2; }
+  .c.prot .ov.p{ background:rgba(255,215,50,.32); }
+  .c.wetA .ov.w{ background:rgba(60,150,255,.42); }
+  .c.bad{ box-shadow: inset 0 0 0 2px #e83a2a; }
+  .c.hl .ov.h{ box-shadow: inset 0 0 0 2px #fff; background:rgba(255,255,255,.18); z-index:5; }
+
+  #stats{ padding:8px 12px; font-size:15px; display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; }
+  .chip{ display:inline-flex; align-items:center; gap:4px; }
+  .chip img{ width:22px; height:22px; object-fit:contain; image-rendering:pixelated; }
+  .legend{ font-size:13px; display:flex; flex-wrap:wrap; gap:4px 12px; }
+  .legend i{ display:inline-block; width:14px; height:14px; border:2px solid var(--wood-dark); vertical-align:middle; margin-right:3px; background-size:cover; image-rendering:pixelated; }
+
+  /* ---------- responsivo ---------- */
+  @media (max-width: 820px){
+    #app{ grid-template-columns:1fr; grid-template-rows:auto 1fr; gap:8px; padding:8px; }
+    #side{ max-height:38dvh; }
+    .tools{ grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); }
+    .title{ font-size:17px; }
+    #stats{ font-size:13px; }
+    .legend{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="title">🌾 Planejador de Plantação</div>
+
+    <div class="panel">
+      <h2>Ferramentas</h2>
+      <div class="tools" id="tools"></div>
+    </div>
+
+    <div class="panel checks">
+      <h2>Opções</h2>
+      <label><input type="checkbox" id="nozzle"> Bocal de pressão (+1)</label>
+      <label><input type="checkbox" id="showWet"> Área dos aspersores</label>
+      <label><input type="checkbox" id="showProt" checked> Área dos espantalhos</label>
+      <label><input type="checkbox" id="showGrid" checked> Linhas da grade</label>
+    </div>
+
+    <div class="panel">
+      <h2>Tamanho</h2>
+      <div class="sizegrid">
+        <label>Largura <input id="w" type="number" value="30" min="5" max="80"></label>
+        <label>Altura <input id="h" type="number" value="20" min="5" max="80"></label>
+      </div>
+      <div class="btnrow">
+        <button id="resize">✔️ Aplicar</button>
+        <button id="clear">🗑️ Limpar</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Presets salvos</h2>
+      <div class="row">
+        <input type="text" id="presetName" placeholder="Nome do preset" maxlength="40">
+        <button id="savePreset">💾 Salvar</button>
+      </div>
+      <div class="row">
+        <select id="presetList"></select>
+      </div>
+      <div class="btnrow">
+        <button id="loadPreset">📂 Carregar</button>
+        <button id="delPreset">❌ Excluir</button>
+      </div>
+      <div id="msg"></div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="zoombar">
+      <button id="zoomOut" title="Afastar">➖</button>
+      <input type="range" id="zoom" min="100" max="400" step="10" value="100">
+      <button id="zoomIn" title="Aproximar">➕</button>
+      <button id="zoomFit" title="Ajustar à tela">⤢ Ajustar</button>
+      <span class="pill" id="zoomVal">100%</span>
+      <button id="panBtn" title="Arrastar para mover a visão">✋ Mover</button>
+    </div>
+    <div id="view"><div id="grid"></div></div>
+    <div class="panel" id="statsPanel" style="padding:6px 10px">
+      <div id="stats"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ===================== SPRITES (pixel art original, 16x16) =====================
+function sprite(rows, pal){
+  const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d');
+  rows.forEach((r,y)=>[...r.padEnd(16,'.')].forEach((ch,x)=>{ if(pal[ch]){ g.fillStyle=pal[ch]; g.fillRect(x,y,1,1);} }));
+  return c.toDataURL();
+}
+function rng(seed){ let s=seed; return ()=>(s=(s*16807)%2147483647)/2147483647; }
+function tile(base, specks, seed, blades){
+  const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d'), r=rng(seed);
+  g.fillStyle=base; g.fillRect(0,0,16,16);
+  for(let i=0;i<34;i++){ g.fillStyle=specks[(r()*specks.length)|0]; g.fillRect((r()*16)|0,(r()*16)|0,1,1); }
+  if(blades) for(let i=0;i<7;i++){ const x=(r()*15)|0, y=(r()*14)|0; g.fillStyle=blades; g.fillRect(x,y,1,2); g.fillRect(x+1,y-1,1,1); }
+  return c.toDataURL();
+}
+const T = {
+  grass: tile('#5d9a36',['#4f872c','#6aab40','#548f30'],7,'#78bd4a'),
+  soil:  tile('#93613a',['#7c4f2d','#a8723f','#86572f','#6d4427'],11),
+  wet:   tile('#5c3b22',['#4c301b','#6a4528','#53351f','#41291a'],11),
+};
+const SPR_SPRINKLER = [
+  '................','.......w........','....w..w..w.....','.....w.w.w......','..ww...c...ww...','.......c........',
+  '......aca.......','....aabcbaa.....','...abbcccbba....','...abcclccba....','...abbcccbba....','....aabbbaa.....',
+  '...ddaaaaadd....','....ddddddd.....','................','................'];
+const W_='#7fd3ff';
+const P_BASIC   ={a:'#3d4652',b:'#7b8794',c:'#b7c2cc',l:'#ffffff',d:'#3a2a1c',w:W_};
+const P_QUALITY ={a:'#6b3f0f',b:'#c9861e',c:'#f3c64a',l:'#fff6c9',d:'#3a2a1c',w:W_};
+const P_IRIDIUM ={a:'#3a1452',b:'#7c32a8',c:'#c178ea',l:'#ffe0ff',d:'#3a2a1c',w:W_};
+const SPR_SCARE = [
+  '......hhhh......','.....hhbhhh.....','...HHHHHHHHHH...','.....ssssss.....','.....sesses.....','.....ssssss.....',
+  '.....smmmms.....','..yyrrrrrrrryy..','.y..rrkrrkrr..y.','....rrrrrrrr....','.....rrkrrr.....','.......pp.......',
+  '.......pp.......','.......pp.......','.....gggggg.....','....gg.gg.gg....'];
+const P_SCARE ={h:'#a0682a',b:'#d33d17',H:'#7a4a1a',s:'#efe0b0',e:'#2b1a0e',m:'#8a5a2a',r:'#3f78c4',k:'#2a4f88',y:'#e8c95a',p:'#6b4222',g:'#4f872c'};
+const P_DELUXE={h:'#3a2058',b:'#ffd23f',H:'#2a1640',s:'#f08a24',e:'#3a1a05',m:'#3a1a05',r:'#7a2a8a',k:'#4d1658',y:'#e8c95a',p:'#6b4222',g:'#4f872c'};
+const SPR_HOE = [
+  '................','................','..ddddd.........','..daaaad........','...ddaad........','.....dhd........',
+  '......hh........','.......hh.......','........hh......','.........hh.....','..........hh....','...........hh...',
+  '............hh..','.............h..','................','................'];
+const SPR_ERASE = [
+  '................','................','..xx........xx..','..xxx......xxx..','...xxx....xxx...','....xxx..xxx....',
+  '.....xxxxxx.....','......xxxx......','......xxxx......','.....xxxxxx.....','....xxx..xxx....','...xxx....xxx...',
+  '..xxx......xxx..','..xx........xx..','................','................'];
+
+const TOOLS = {
+  soil:    { name:'Arar solo',          img:sprite(SPR_HOE,{d:'#4a4a4a',a:'#a9b3bb',h:'#9a5a26'}) },
+  basic:   { name:'Aspersor',           img:sprite(SPR_SPRINKLER,P_BASIC),   kind:'spr', r:0 },
+  quality: { name:'Asp. Qualidade',     img:sprite(SPR_SPRINKLER,P_QUALITY), kind:'spr', r:1 },
+  iridium: { name:'Asp. Irídio',        img:sprite(SPR_SPRINKLER,P_IRIDIUM), kind:'spr', r:2 },
+  scare:   { name:'Espantalho',         img:sprite(SPR_SCARE,P_SCARE),  kind:'scare', r:9 },
+  deluxe:  { name:'Espant. Deluxe',     img:sprite(SPR_SCARE,P_DELUXE), kind:'scare', r:17 },
+  erase:   { name:'Apagar',             img:sprite(SPR_ERASE,{x:'#d33d17'}) },
+};
+// Imagens próprias: ./img/<id>.png substitui o sprite correspondente
+for(const k in TOOLS){ const im=new Image(); im.onload=()=>{ TOOLS[k].img=im.src; refreshIcons(); render(); }; im.src='img/'+k+'.png'; }
+
+// ===================== ESTADO / REGRAS =====================
+let W=30, H=20, cells=new Array(W*H).fill(null), tool='quality', hover=-1;
+let painting=false, paintTool=null, panMode=false, zoom=1, baseSize=24;
+const $=id=>document.getElementById(id);
+
+function sprinklerTiles(x,y,type){
+  let r=TOOLS[type].r+($('nozzle').checked?1:0), out=[];
+  if(r===0) return [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+  for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++) if(dx||dy) out.push([x+dx,y+dy]);
+  return out;
+}
+function scareTiles(x,y,type){
+  const R=TOOLS[type].r, out=[];
+  for(let dy=-R;dy<=R;dy++) for(let dx=-R;dx<=R;dx++) if((dx||dy)&&Math.hypot(dx,dy)<R) out.push([x+dx,y+dy]);
+  return out;
+}
+function tilesOf(i, t=cells[i]){
+  const x=i%W, y=(i/W)|0;
+  if(!t||!TOOLS[t].kind) return [];
+  return (TOOLS[t].kind==='spr'?sprinklerTiles:scareTiles)(x,y,t).filter(([a,b])=>a>=0&&b>=0&&a<W&&b<H);
+}
+
+// ===================== GRADE =====================
+function resizeGrid(w,h){
+  const old=cells, ow=W, oh=H; W=w; H=h; cells=new Array(W*H).fill(null);
+  for(let y=0;y<Math.min(h,oh);y++) for(let x=0;x<Math.min(w,ow);x++) cells[y*W+x]=old[y*ow+x]||null;
+  $('w').value=W; $('h').value=H;
+  build(); fit(); render(); autosave();
+}
+function build(){
+  const g=$('grid'); g.innerHTML=''; g.style.gridTemplateColumns=`repeat(${W},var(--s))`;
+  for(let i=0;i<W*H;i++){
+    const d=document.createElement('div'); d.className='c'; d.dataset.i=i;
+    d.innerHTML='<div class="ov w"></div><div class="ov p"></div><div class="ov h"></div><div class="o"></div>';
+    g.appendChild(d);
+  }
+}
+function cellAt(e){
+  const el=document.elementFromPoint(e.clientX,e.clientY);
+  const c=el&&el.closest&&el.closest('.c'); return c?+c.dataset.i:-1;
+}
+function paint(i,t){ if(i<0) return; const v=t==='erase'?null:t; if(cells[i]!==v){ cells[i]=v; render(); } }
+
+// Pintura (mouse e toque) e modo mover
+const view=$('view'), grid=$('grid');
+let panStart=null;
+view.addEventListener('pointerdown',e=>{
+  if(panMode || e.button===1){ panStart={x:e.clientX,y:e.clientY,l:view.scrollLeft,t:view.scrollTop}; view.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+  const i=cellAt(e); if(i<0) return;
+  painting=true; paintTool = e.button===2 ? 'erase' : tool; paint(i,paintTool); e.preventDefault();
+});
+view.addEventListener('pointermove',e=>{
+  if(panStart){ view.scrollLeft=panStart.l-(e.clientX-panStart.x); view.scrollTop=panStart.t-(e.clientY-panStart.y); return; }
+  const i=cellAt(e);
+  if(painting){ paint(i,paintTool); }
+  if(i!==hover && e.pointerType==='mouse'){ hover=i; render(); }
+});
+window.addEventListener('pointerup',()=>{ if(painting) autosave(); painting=false; panStart=null; });
+view.addEventListener('pointerleave',()=>{ if(!painting){ hover=-1; render(); } });
+view.addEventListener('contextmenu',e=>e.preventDefault());
+
+// ===================== ZOOM =====================
+function fit(){
+  const pad=8, vw=view.clientWidth-pad, vh=view.clientHeight-pad;
+  baseSize=Math.max(4, Math.floor(Math.min(vw/W, vh/H)));
+  applyZoom();
+}
+function applyZoom(keepCenter=true){
+  const cx=(view.scrollLeft+view.clientWidth/2)/Math.max(1,view.scrollWidth);
+  const cy=(view.scrollTop+view.clientHeight/2)/Math.max(1,view.scrollHeight);
+  grid.style.setProperty('--s', Math.round(baseSize*zoom)+'px');
+  $('zoom').value=Math.round(zoom*100); $('zoomVal').textContent=Math.round(zoom*100)+'%';
+  if(keepCenter){ view.scrollLeft=cx*view.scrollWidth-view.clientWidth/2; view.scrollTop=cy*view.scrollHeight-view.clientHeight/2; }
+}
+function setZoom(z){ zoom=Math.min(4,Math.max(1,z)); applyZoom(); }
+$('zoom').oninput=e=>setZoom(e.target.value/100);
+$('zoomIn').onclick=()=>setZoom(zoom+.25);
+$('zoomOut').onclick=()=>setZoom(zoom-.25);
+$('zoomFit').onclick=()=>{ zoom=1; fit(); };
+view.addEventListener('wheel',e=>{ if(!e.ctrlKey) return; e.preventDefault(); setZoom(zoom+(e.deltaY<0?.25:-.25)); },{passive:false});
+$('panBtn').onclick=()=>{ panMode=!panMode; $('panBtn').classList.toggle('on',panMode); view.classList.toggle('pan',panMode); };
+new ResizeObserver(()=>fit()).observe(view);
+
+// ===================== RENDER =====================
+function render(){
+  const wet=new Set(), prot=new Set(), hl=new Set();
+  cells.forEach((t,i)=>{ if(!t||!TOOLS[t].kind) return;
+    const set=TOOLS[t].kind==='spr'?wet:prot; tilesOf(i).forEach(([x,y])=>set.add(y*W+x)); });
+  let ghost=null;
+  if(hover>=0 && !panMode){
+    let t=cells[hover]&&TOOLS[cells[hover]].kind?cells[hover]:null;
+    if(!t&&TOOLS[tool].kind){ t=tool; ghost=tool; }
+    if(t) tilesOf(hover,t).forEach(([x,y])=>hl.add(y*W+x));
+  }
+  const showP=$('showProt').checked, showW=$('showWet').checked, showG=$('showGrid').checked;
+  let soil=0,dry=0,unprot=0,count={};
+  grid.childNodes.forEach((d,i)=>{
+    const t=cells[i]; let cls='c'+(showG?' grid':''), bg=T.grass;
+    if(t) count[t]=(count[t]||0)+1;
+    if(t==='soil'){ soil++;
+      if(wet.has(i)) bg=T.wet; else { bg=T.soil; dry++; }
+      if(!prot.has(i)){ unprot++; cls+=' bad'; } }
+    if(showP&&prot.has(i)) cls+=' prot';
+    if(showW&&wet.has(i)) cls+=' wetA';
+    if(hl.has(i)) cls+=' hl';
+    if(d.className!==cls) d.className=cls;
+    const bgu=`url(${bg})`; if(d.style.backgroundImage!==bgu) d.style.backgroundImage=bgu;
+    const o=d.lastChild, isGhost=!t&&ghost&&i===hover;
+    const objT=(t&&t!=='soil')?t:(isGhost?ghost:null);
+    const ou=objT?`url(${TOOLS[objT].img})`:'';
+    if(o.style.backgroundImage!==ou) o.style.backgroundImage=ou;
+    o.className='o'+(isGhost?' ghost':'');
+  });
+  const items=Object.keys(TOOLS).filter(k=>TOOLS[k].kind&&count[k])
+    .map(k=>`<span class="chip"><img src="${TOOLS[k].img}">${TOOLS[k].name}: <b>${count[k]}</b></span>`).join('');
+  $('stats').innerHTML=
+    `<span class="chip">🟫 Plantáveis: <b>${soil}</b></span>`+
+    `<span class="chip">💧 Regados: <b>${soil-dry}</b></span>`+
+    `<span class="chip">🌵 Secos: <b style="color:${dry?'#c0561a':'inherit'}">${dry}</b></span>`+
+    `<span class="chip">🐦 Sem espantalho: <b style="color:${unprot?'#d33d17':'inherit'}">${unprot}</b></span>`+
+    items;
+}
+
+// ===================== PRESETS (localStorage) =====================
+const KEY='plantPlanner.presets', CUR='plantPlanner.current';
+function store(){ try{ return JSON.parse(localStorage.getItem(KEY))||{}; }catch{ return {}; } }
+function putStore(o){ try{ localStorage.setItem(KEY,JSON.stringify(o)); return true; }catch{ return false; } }
+function snapshot(){ return { W,H,cells,nozzle:$('nozzle').checked, date:Date.now() }; }
+function restore(p){
+  if(!p||!p.W||!p.H||!Array.isArray(p.cells)) return false;
+  W=p.W; H=p.H; cells=p.cells.map(v=>v&&TOOLS[v]?v:null);
+  $('w').value=W; $('h').value=H; $('nozzle').checked=!!p.nozzle;
+  build(); fit(); render(); return true;
+}
+function autosave(){ try{ localStorage.setItem(CUR,JSON.stringify(snapshot())); }catch{} }
+function msg(t){ $('msg').textContent=t; clearTimeout(msg.t); msg.t=setTimeout(()=>$('msg').textContent='',3000); }
+function refreshPresets(sel){
+  const s=store(), names=Object.keys(s).sort((a,b)=>s[b].date-s[a].date);
+  $('presetList').innerHTML = names.length
+    ? names.map(n=>`<option${n===sel?' selected':''}>${n.replace(/</g,'&lt;')}</option>`).join('')
+    : '<option value="">(nenhum preset salvo)</option>';
+}
+$('savePreset').onclick=()=>{
+  const n=$('presetName').value.trim(); if(!n){ msg('Digite um nome para o preset.'); return; }
+  const s=store(); if(s[n]&&!confirm(`Substituir o preset "${n}"?`)) return;
+  s[n]=snapshot(); if(putStore(s)){ refreshPresets(n); msg(`Preset "${n}" salvo!`); $('presetName').value=''; }
+  else msg('Não foi possível salvar (armazenamento bloqueado?).');
+};
+$('loadPreset').onclick=()=>{
+  const n=$('presetList').value; if(!n) return;
+  if(restore(store()[n])){ autosave(); msg(`Preset "${n}" carregado.`); }
+};
+$('delPreset').onclick=()=>{
+  const n=$('presetList').value; if(!n||!confirm(`Excluir o preset "${n}"?`)) return;
+  const s=store(); delete s[n]; putStore(s); refreshPresets(); msg(`Preset "${n}" excluído.`);
+};
+
+// ===================== UI =====================
+function refreshIcons(){
+  document.querySelectorAll('#tools button[data-t]').forEach(b=>b.querySelector('img').src=TOOLS[b.dataset.t].img);
+  $('legend').innerHTML=
+    `<span><i style="background-image:url(${T.soil})"></i>solo seco</span>`+
+    `<span><i style="background-image:url(${T.wet})"></i>solo regado</span>`+
+    `<span><i style="background:#93613a;box-shadow:inset 0 0 0 2px #e83a2a"></i>sem espantalho</span>`+
+    `<span>Clique/arraste para pintar · botão direito apaga · Ctrl+roda dá zoom · botão do meio move</span>`;
+}
+for(const k in TOOLS){
+  const b=document.createElement('button'); b.dataset.t=k;
+  b.innerHTML=`<img src="${TOOLS[k].img}"><span>${TOOLS[k].name}</span>`;
+  b.onclick=()=>{ tool=k; document.querySelectorAll('#tools button[data-t]').forEach(x=>x.classList.toggle('on',x.dataset.t===k));
+    if(panMode) $('panBtn').click(); render(); };
+  $('tools').appendChild(b);
+}
+document.querySelector('#tools button[data-t=quality]').classList.add('on');
+const fillBtn=document.createElement('button'); fillBtn.className='wide'; fillBtn.textContent='✨ Arar área dos aspersores';
+fillBtn.onclick=()=>{ cells.forEach((t,i)=>{ if(t&&TOOLS[t].kind==='spr') tilesOf(i).forEach(([x,y])=>{const j=y*W+x; if(!cells[j]) cells[j]='soil';}); }); render(); autosave(); };
+$('tools').appendChild(fillBtn);
+
+$('resize').onclick=()=>resizeGrid(Math.min(80,Math.max(5,+$('w').value||30)), Math.min(80,Math.max(5,+$('h').value||20)));
+$('clear').onclick=()=>{ if(confirm('Limpar toda a plantação?')){ cells.fill(null); render(); autosave(); } };
+['showProt','showWet','showGrid'].forEach(id=>$(id).onchange=render);
+$('nozzle').onchange=()=>{ render(); autosave(); };
+
+refreshIcons(); refreshPresets();
+let last=null; try{ last=JSON.parse(localStorage.getItem(CUR)); }catch{}
+if(!restore(last)){ build(); fit(); render(); }
+</script>
+</body>
+</html>
