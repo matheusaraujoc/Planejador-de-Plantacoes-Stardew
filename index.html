@@ -96,6 +96,7 @@
 
   #stats{ padding:8px 12px; font-size:15px; display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; }
   .chip{ display:inline-flex; align-items:center; gap:4px; }
+  .chip.seeds{ background:#ffe08a; border:3px solid var(--wood-dark); padding:2px 8px; font-weight:700; }
   .chip img{ width:22px; height:22px; object-fit:contain; image-rendering:pixelated; }
   .legend{ font-size:13px; display:flex; flex-wrap:wrap; gap:4px 12px; }
   .legend i{ display:inline-block; width:14px; height:14px; border:2px solid var(--wood-dark); vertical-align:middle; margin-right:3px; background-size:cover; image-rendering:pixelated; }
@@ -194,7 +195,20 @@ const T = {
   grass: tile('#5d9a36',['#4f872c','#6aab40','#548f30'],7,'#78bd4a'),
   soil:  tile('#93613a',['#7c4f2d','#a8723f','#86572f','#6d4427'],11),
   wet:   tile('#5c3b22',['#4c301b','#6a4528','#53351f','#41291a'],11),
+  path:  pathTile(),
 };
+// Caminho de pedras (original)
+function pathTile(){
+  const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d'), r=rng(23);
+  g.fillStyle='#6f6a5c'; g.fillRect(0,0,16,16);
+  const stones=[[0,0,7,5],[8,0,8,4],[0,6,5,5],[6,5,6,6],[13,5,3,5],[0,12,8,4],[9,12,7,4],[13,11,3,1]];
+  stones.forEach(([x,y,w,h])=>{
+    g.fillStyle=['#b3ad9b','#a7a18f','#bcb6a4'][(r()*3)|0]; g.fillRect(x,y,w-1,h-1);
+    g.fillStyle='#d2ccb9'; g.fillRect(x,y,w-1,1);
+    g.fillStyle='#8c8675'; g.fillRect(x,y+h-2,w-1,1);
+  });
+  return c.toDataURL();
+}
 const SPR_SPRINKLER = [
   '................','.......w........','....w..w..w.....','.....w.w.w......','..ww...c...ww...','.......c........',
   '......aca.......','....aabcbaa.....','...abbcccbba....','...abcclccba....','...abbcccbba....','....aabbbaa.....',
@@ -220,7 +234,8 @@ const SPR_ERASE = [
 
 const TOOLS = {
   soil:    { name:'Arar solo',          img:sprite(SPR_HOE,{d:'#4a4a4a',a:'#a9b3bb',h:'#9a5a26'}) },
-  basic:   { name:'Aspersor',           img:sprite(SPR_SPRINKLER,P_BASIC),   kind:'spr', r:0 },
+  path:    { name:'Caminho',            img:T.path },
+  basic:   { name:'Aspersor',          img:sprite(SPR_SPRINKLER,P_BASIC),   kind:'spr', r:0 },
   quality: { name:'Asp. Qualidade',     img:sprite(SPR_SPRINKLER,P_QUALITY), kind:'spr', r:1 },
   iridium: { name:'Asp. Irídio',        img:sprite(SPR_SPRINKLER,P_IRIDIUM), kind:'spr', r:2 },
   scare:   { name:'Espantalho',         img:sprite(SPR_SCARE,P_SCARE),  kind:'scare', r:9 },
@@ -325,28 +340,32 @@ function render(){
     if(t) tilesOf(hover,t).forEach(([x,y])=>hl.add(y*W+x));
   }
   const showP=$('showProt').checked, showW=$('showWet').checked, showG=$('showGrid').checked;
-  let soil=0,dry=0,unprot=0,count={};
+  let soil=0,dry=0,unprot=0,ok=0,count={},freeWet=0;
   grid.childNodes.forEach((d,i)=>{
     const t=cells[i]; let cls='c'+(showG?' grid':''), bg=T.grass;
     if(t) count[t]=(count[t]||0)+1;
     if(t==='soil'){ soil++;
       if(wet.has(i)) bg=T.wet; else { bg=T.soil; dry++; }
-      if(!prot.has(i)){ unprot++; cls+=' bad'; } }
+      if(!prot.has(i)){ unprot++; cls+=' bad'; }
+      if(wet.has(i)&&prot.has(i)) ok++; }
+    if(t==='path') bg=T.path;
+    if(!t && wet.has(i)){ freeWet++; if(prot.has(i)) ok++; }
     if(showP&&prot.has(i)) cls+=' prot';
     if(showW&&wet.has(i)) cls+=' wetA';
     if(hl.has(i)) cls+=' hl';
     if(d.className!==cls) d.className=cls;
     const bgu=`url(${bg})`; if(d.style.backgroundImage!==bgu) d.style.backgroundImage=bgu;
     const o=d.lastChild, isGhost=!t&&ghost&&i===hover;
-    const objT=(t&&t!=='soil')?t:(isGhost?ghost:null);
+    const objT=(t&&TOOLS[t].kind)?t:(isGhost?ghost:null);
     const ou=objT?`url(${TOOLS[objT].img})`:'';
     if(o.style.backgroundImage!==ou) o.style.backgroundImage=ou;
     o.className='o'+(isGhost?' ghost':'');
   });
-  const items=Object.keys(TOOLS).filter(k=>TOOLS[k].kind&&count[k])
+  const items=Object.keys(TOOLS).filter(k=>(TOOLS[k].kind||k==='path')&&count[k])
     .map(k=>`<span class="chip"><img src="${TOOLS[k].img}">${TOOLS[k].name}: <b>${count[k]}</b></span>`).join('');
   $('stats').innerHTML=
-    `<span class="chip">🟫 Plantáveis: <b>${soil}</b></span>`+
+    `<span class="chip seeds" title="Solo arado (${soil}) + grama livre regada pelos aspersores (${freeWet}). Caminhos e objetos não contam.">🌱 Sementes para comprar: <b>${soil+freeWet}</b></span>`+
+    `<span class="chip">✅ Regadas e protegidas: <b>${ok}</b></span>`+
     `<span class="chip">💧 Regados: <b>${soil-dry}</b></span>`+
     `<span class="chip">🌵 Secos: <b style="color:${dry?'#c0561a':'inherit'}">${dry}</b></span>`+
     `<span class="chip">🐦 Sem espantalho: <b style="color:${unprot?'#d33d17':'inherit'}">${unprot}</b></span>`+
@@ -393,6 +412,7 @@ function refreshIcons(){
   $('legend').innerHTML=
     `<span><i style="background-image:url(${T.soil})"></i>solo seco</span>`+
     `<span><i style="background-image:url(${T.wet})"></i>solo regado</span>`+
+    `<span><i style="background-image:url(${T.path})"></i>caminho (não plantável)</span>`+
     `<span><i style="background:#93613a;box-shadow:inset 0 0 0 2px #e83a2a"></i>sem espantalho</span>`+
     `<span>Clique/arraste para pintar · botão direito apaga · Ctrl+roda dá zoom · botão do meio move</span>`;
 }
